@@ -1,29 +1,56 @@
+#!/usr/bin/env python3
+
+import rclpy
+from rclpy.node import Node
 import cv2
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 
-def main():
-    camera_index = 0
-    cap = cv2.VideoCapture(camera_index)
 
-    if not cap.isOpened():
-        print(f"Error: Could not open camera {camera_index}")
-        return
+class CameraNode(Node):
 
-    print("Camera opened successfully. Press 'q' to quit.")
+    def __init__(self):
+        super().__init__('camera_node')
 
-    while True:
-        ret, frame = cap.read()
+        self.get_logger().info("Camera Node started")
+
+        self.cap = cv2.VideoCapture(0)
+        self.bridge = CvBridge()
+
+        # Publisher
+        self.publisher_ = self.create_publisher(Image, 'camera/image_raw', 10)
+
+        # Timer
+        self.timer = self.create_timer(0.1, self.timer_callback)
+
+    def timer_callback(self):
+        ret, frame = self.cap.read()
 
         if not ret:
-            print("Error: Failed to read frame from camera.")
-            break
+            self.get_logger().error("Failed to capture frame")
+            return
 
-        cv2.imshow("Camera Feed", frame)
+        # OpenCV → ROS2 Image
+        msg = self.bridge.cv2_to_imgmsg(frame, encoding='bgr8')
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        self.publisher_.publish(msg)
+        self.get_logger().info("Publishing image")
 
-    cap.release()
-    cv2.destroyAllWindows()
+    def destroy_node(self):
+        self.cap.release()
+        super().destroy_node()
 
-if __name__ == "__main__":
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    node = CameraNode()
+
+    rclpy.spin(node)
+
+    node.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
     main()
